@@ -4,7 +4,9 @@ use std::{
     process::{Command, Stdio},
 };
 
-use crate::{commands::create::Request, discovery::project::ProjectIdentity, error::DevCloneError};
+use crate::{
+    commands::create::Request, discovery::project::ProjectIdentity, error::DevCloneError, info,
+};
 
 enum Materialization {
     Archive,
@@ -29,7 +31,10 @@ fn materialize_archive(request: &Request, destination: &Path) -> Result<(), DevC
         .stdout(Stdio::piped())
         .spawn()?;
 
-    let archive_stdout = archive.stdout.take().ok_or(DevCloneError::CommandFailed)?;
+    let archive_stdout = archive.stdout.take().ok_or(DevCloneError::CommandFailed {
+        command: "git archive".into(),
+        stderr: "Failed to capture stdout".into(),
+    })?;
 
     let mut tar = Command::new("tar")
         .arg("-x")
@@ -42,11 +47,17 @@ fn materialize_archive(request: &Request, destination: &Path) -> Result<(), DevC
     let tar_status = tar.wait()?;
 
     if !archive_status.success() {
-        return Err(DevCloneError::CommandFailed);
+        return Err(DevCloneError::CommandFailed {
+            command: "git archive".into(),
+            stderr: "git archive failed".into(),
+        });
     }
 
     if !tar_status.success() {
-        return Err(DevCloneError::CommandFailed);
+        return Err(DevCloneError::CommandFailed {
+            command: "tar extraction".into(),
+            stderr: "tar extraction failed".into(),
+        });
     }
 
     Ok(())
@@ -61,6 +72,7 @@ fn materialize_git(request: &Request, destination: &Path) -> Result<(), DevClone
             .arg("--local")
             .arg(source)
             .arg(destination),
+        "git clone",
     )?;
 
     run_command(
@@ -69,28 +81,37 @@ fn materialize_git(request: &Request, destination: &Path) -> Result<(), DevClone
             .arg(destination)
             .arg("switch")
             .arg(&request.revision),
+        "git switch",
     )?;
 
     Ok(())
 }
 
-fn run_command(command: &mut Command) -> Result<(), DevCloneError> {
-    let status = command.status()?;
-
-    if !status.success() {
-        return Err(DevCloneError::CommandFailed);
+fn run_command(command: &mut Command, action: &str) -> Result<(), DevCloneError> {
+    if let Err(err) = command.status() {
+        return Err(DevCloneError::CommandFailed {
+            command: action.into(),
+            stderr: err.to_string(),
+        });
     }
 
     Ok(())
+}
+
+/// normalize revision for creating the destination directory
+///
+/// `e.g` docs/new-feature -> docs_new_feature
+fn normalize_revision(revision: &str) -> String {
+    revision.replace('/', "_").replace("-", "_")
 }
 
 fn manage_destination(project: &ProjectIdentity, revision: &str) -> Result<PathBuf, DevCloneError> {
     let parent = project
         .root_path
         .parent()
-        .ok_or(DevCloneError::InvalidPath)?;
+        .ok_or(DevCloneError::InvalidPath(project.root_path.clone()))?;
 
-    Ok(parent.join(format!("{}_{}", project.name, revision)))
+    Ok(parent.join(format!("{}_{}", project.name, normalize_revision(revision))))
 }
 
 pub struct Materializer {
@@ -115,8 +136,17 @@ impl Materializer {
             Materialization::Archive
         };
 
+        if self.destination.exists() {
+            return Err(DevCloneError::DestinationExists(self.destination.clone()));
+        }
+
         if !self.request.git {
-            fs::create_dir_all(&self.destination)?;
+            match fs::create_dir_all(&self.destination) {
+                Ok(_) => {
+                    info!("Created destination directory: {:?}", &self.destination);
+                }
+                Err(e) => return Err(DevCloneError::Io(e)),
+            }
         }
 
         strategy.execute(&self.request, &self.destination)

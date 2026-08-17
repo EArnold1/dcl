@@ -1,18 +1,23 @@
 use std::{io, path::PathBuf};
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum DevCloneError {
-    #[error("I/O error occurred: {0}")]
+    #[error("I/O error: {0}")]
     Io(#[from] io::Error),
+
     #[error("unsupported directory entry type: {0}")]
     UnsupportedEntry(PathBuf),
-    #[error("Config dir not found")]
-    ConfigDirNotFound,
-    #[error("Project name not found")]
+
+    #[error("project name could not be determined")]
     ProjectNameNotFound,
-    #[error("Invalid path")]
-    InvalidPath,
-    #[error("Command failed")]
-    CommandFailed,
+
+    #[error("could not determine parent directory for: {0}")]
+    InvalidPath(PathBuf),
+
+    #[error("command `{command}` failed: {stderr}")]
+    CommandFailed { command: String, stderr: String },
+
+    #[error("destination already exists: {0}")]
+    DestinationExists(PathBuf),
 }
