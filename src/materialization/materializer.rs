@@ -6,6 +6,7 @@ use std::{
 
 use crate::{
     commands::create::Request, discovery::project::ProjectIdentity, error::DevCloneError, info,
+    materialization::environment::EnvironmentMaterializer,
 };
 
 enum Materialization {
@@ -130,6 +131,13 @@ impl Materializer {
     }
 
     pub fn materialize(&self) -> Result<(), DevCloneError> {
+        self.materialize_project()?;
+        self.materialize_environment()?;
+
+        Ok(())
+    }
+
+    fn materialize_project(&self) -> Result<(), DevCloneError> {
         let strategy = if self.request.git {
             Materialization::Git
         } else {
@@ -150,5 +158,11 @@ impl Materializer {
         }
 
         strategy.execute(&self.request, &self.destination)
+    }
+
+    fn materialize_environment(&self) -> Result<(), DevCloneError> {
+        let environment = EnvironmentMaterializer::new(&self.request.config);
+
+        environment.materialize(&self.request.project.root_path, &self.destination)
     }
 }

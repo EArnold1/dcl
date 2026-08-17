@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use toml;
 
 use crate::{config::paths::Paths, error::DevCloneError};
@@ -13,7 +15,7 @@ pub struct Config {
 
 #[derive(Debug, Deserialize)]
 pub struct PathConfig {
-    pub paths: Vec<String>,
+    pub paths: HashSet<String>,
 }
 
 impl Config {
