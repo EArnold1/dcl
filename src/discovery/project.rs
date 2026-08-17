@@ -1,30 +1,24 @@
-use crate::error::DevCloneError;
+use std::env;
 use std::path::PathBuf;
 
-// What would be the properties for a project identity?
+use crate::error::DevCloneError;
 
 #[derive(Debug)]
 pub struct ProjectIdentity {
-    name: String,       // name of the instance
-    root_path: PathBuf, // project root
-}
-
-fn discover() -> Result<PathBuf, DevCloneError> {
-    Ok(std::env::current_dir()?)
+    pub name: String,
+    pub root_path: PathBuf,
 }
 
 impl ProjectIdentity {
-    pub fn new() -> Result<Self, DevCloneError> {
-        let root = discover()?;
-        let name = &root
-            .file_name()
-            .ok_or(DevCloneError::ProjectNameNotFound)?
-            .to_string_lossy()
-            .to_string();
+    pub fn discover() -> Result<Self, DevCloneError> {
+        let root_path = env::current_dir()?;
 
-        Ok(Self {
-            name: name.to_owned(),
-            root_path: discover()?,
-        })
+        let name = root_path
+            .file_name()
+            .ok_or(DevCloneError::ProjectNameNotFound)? // TODO: use a wider error type
+            .to_string_lossy()
+            .into_owned();
+
+        Ok(Self { name, root_path })
     }
 }

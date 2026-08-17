@@ -11,4 +11,8 @@ pub enum DevCloneError {
     ConfigDirNotFound,
     #[error("Project name not found")]
     ProjectNameNotFound,
+    #[error("Invalid path")]
+    InvalidPath,
+    #[error("Command failed")]
+    CommandFailed,
 }

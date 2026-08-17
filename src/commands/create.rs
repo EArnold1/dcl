@@ -1,18 +1,19 @@
-// use std::println
-
-use crate::{config::loader::Config, discovery::project::ProjectIdentity, error::DevCloneError};
+use crate::{
+    config::loader::Config, discovery::project::ProjectIdentity, error::DevCloneError,
+    materialization::materializer,
+};
 
 #[derive(Debug)]
-struct Request {
-    config: Config,
-    revision: String,
-    project: ProjectIdentity,
-    git: bool,
+pub struct Request {
+    pub config: Config,
+    pub revision: String,
+    pub project: ProjectIdentity,
+    pub git: bool,
 }
 
 pub fn create(revision: String, git: bool) -> Result<(), DevCloneError> {
     let config = Config::load_from_file()?;
-    let project = ProjectIdentity::new()?;
+    let project = ProjectIdentity::discover()?;
 
     let request = Request {
         config,
@@ -21,7 +22,7 @@ pub fn create(revision: String, git: bool) -> Result<(), DevCloneError> {
         git,
     };
 
-    println!("{:?}", request);
+    materializer::Materializer::new(request)?.materialize()?;
 
     Ok(())
 }
