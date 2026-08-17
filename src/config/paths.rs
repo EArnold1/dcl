@@ -3,7 +3,7 @@ use std::{fs, path::PathBuf};
 
 use crate::error::DevCloneError;
 
-const APP_NAME: &str = "dcl";
+const APP_NAME: &str = "devclone";
 const CONFIG_FILE: &str = "config.toml";
 
 #[derive(Debug, Clone)]
