@@ -15,7 +15,7 @@ pub struct Paths {
 impl Paths {
     fn new() -> Result<Self, DevCloneError> {
         let config_dir = dirs::config_dir()
-            .ok_or(DevCloneError::ConfigDirNotFound)?
+            .ok_or(DevCloneError::InvalidPath(PathBuf::from("config dir")))?
             .join(APP_NAME);
 
         let config_file = config_dir.join(CONFIG_FILE);
