@@ -7,6 +7,11 @@ use std::{
 
 use crate::{config::loader::Config, error::DevCloneError};
 
+// The EnvironmentMaterializer happens after the project has been materialized, which is done by git.
+// This means we can just rely on the .gitignore file to determine the ignored files, and then apply the symlinks and copies as specified in the config.
+// This might change if we decide to not use git for materialization.
+// If git becomes optional, then we can do environment materialization before project materialization and not entirely rely on the .gitignore file.
+
 #[derive(Debug)]
 pub struct EnvironmentMaterializer<'a> {
     config: &'a Config,
@@ -20,6 +25,7 @@ impl<'a> EnvironmentMaterializer<'a> {
     pub fn materialize(&self, source: &Path, destination: &Path) -> Result<(), DevCloneError> {
         let ignored = self.discover_ignored(source)?;
 
+        // TODO: Use threads to process multiple paths concurrently
         for path in ignored {
             self.materialize_path(&path, source, destination)?;
         }

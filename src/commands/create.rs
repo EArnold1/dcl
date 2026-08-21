@@ -22,7 +22,9 @@ pub fn create(revision: String, git: bool) -> Result<(), DevCloneError> {
         git,
     };
 
-    materializer::Materializer::new(request)?.materialize()?;
+    materializer::Materializer::new(request)?
+        .materialize_project()?
+        .materialize_environment()?;
 
     Ok(())
 }
