@@ -1,11 +1,11 @@
 use std::{
-    collections::HashSet,
     fs,
     os::unix::fs::symlink,
     path::{Path, PathBuf},
 };
 
 use crate::{config::loader::Config, error::DevCloneError};
+use globset::{Glob, GlobSet, GlobSetBuilder};
 
 // The EnvironmentMaterializer happens after the project has been materialized, which is done by git.
 // This means we can just rely on the .gitignore file to determine the ignored files, and then apply the symlinks and copies as specified in the config.
@@ -25,9 +25,21 @@ impl<'a> EnvironmentMaterializer<'a> {
     pub fn materialize(&self, source: &Path, destination: &Path) -> Result<(), DevCloneError> {
         let ignored = self.discover_ignored(source)?;
 
+        let symlink_set = self.build_glob_set(
+            &self
+                .config
+                .symlinks
+                .paths
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>(),
+        )?;
+        let copy_set =
+            self.build_glob_set(&self.config.copies.paths.iter().cloned().collect::<Vec<_>>())?;
+
         // TODO: Use threads to process multiple paths concurrently
         for path in ignored {
-            self.materialize_path(&path, source, destination)?;
+            self.materialize_path(&path, source, destination, &symlink_set, &copy_set)?;
         }
 
         Ok(())
@@ -36,23 +48,53 @@ impl<'a> EnvironmentMaterializer<'a> {
     fn discover_ignored(&self, source: &Path) -> Result<Vec<PathBuf>, DevCloneError> {
         let contents = fs::read_to_string(source.join(".gitignore"))?;
 
-        let ignored: HashSet<&str> = contents
+        let patterns: Vec<String> = contents
             .lines()
             .map(str::trim)
             .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .map(|s| s.to_string())
             .collect();
 
-        let paths = fs::read_dir(source)?
-            .filter_map(Result::ok)
-            .map(|entry| entry.path())
-            .filter(|path| {
-                path.file_name()
-                    .and_then(|name| name.to_str())
-                    .is_some_and(|name| ignored.contains(name)) // Implement pattern matching "/*, /*/*.ext, /dir/*"
-            })
-            .collect();
+        let glob_set = self.build_glob_set(&patterns)?;
 
-        Ok(paths)
+        let mut ignored_paths = Vec::new();
+
+        for entry in fs::read_dir(source)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if self.matches_glob_set(&path, source, &glob_set) {
+                ignored_paths.push(path);
+            }
+        }
+
+        Ok(ignored_paths)
+    }
+
+    fn build_glob_set(&self, patterns: &[String]) -> Result<GlobSet, DevCloneError> {
+        let mut builder = GlobSetBuilder::new();
+
+        for pattern in patterns {
+            let normalized = if let Some(stripped) = pattern.strip_prefix('/') {
+                stripped.to_string()
+            } else {
+                pattern.clone()
+            };
+
+            builder.add(Glob::new(&normalized).map_err(|e| {
+                DevCloneError::InvalidGlobPattern(format!("{}: {}", pattern, e))
+            })?);
+        }
+
+        builder.build().map_err(|e| {
+            DevCloneError::GlobSetBuild(e.to_string())
+        })
+    }
+
+    fn matches_glob_set(&self, path: &Path, source: &Path, glob_set: &GlobSet) -> bool {
+        let relative_path = path.strip_prefix(source).unwrap_or(path).to_string_lossy();
+
+        !glob_set.matches(&*relative_path).is_empty()
     }
 
     fn materialize_path(
@@ -60,20 +102,17 @@ impl<'a> EnvironmentMaterializer<'a> {
         path: &Path,
         source: &Path,
         destination: &Path,
+        symlink_set: &GlobSet,
+        copy_set: &GlobSet,
     ) -> Result<(), DevCloneError> {
-        let name = path
-            .file_name()
-            .ok_or_else(|| DevCloneError::InvalidPath(path.to_owned()))?;
+        let relative_path = path.strip_prefix(source).unwrap_or(path).to_string_lossy();
 
-        let name = name.to_string_lossy();
+        let destination_path = destination.join(&*relative_path);
 
-        let source_path = source.join(&*name);
-        let destination_path = destination.join(&*name);
-
-        if self.config.symlinks.paths.contains(name.as_ref()) {
-            symlink(&source_path, &destination_path)?;
-        } else if self.config.copies.paths.contains(name.as_ref()) {
-            copy(&source_path, &destination_path)?;
+        if self.matches_glob_set(path, source, symlink_set) {
+            symlink(path, &destination_path)?;
+        } else if self.matches_glob_set(path, source, copy_set) {
+            copy(path, &destination_path)?;
         }
 
         Ok(())
