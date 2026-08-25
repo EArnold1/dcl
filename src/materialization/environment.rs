@@ -6,6 +6,7 @@ use std::{
 
 use crate::{config::loader::Config, error::DevCloneError};
 use globset::{Glob, GlobSet, GlobSetBuilder};
+use rayon::prelude::*;
 
 // The EnvironmentMaterializer happens after the project has been materialized, which is done by git.
 // This means we can just rely on the .gitignore file to determine the ignored files, and then apply the symlinks and copies as specified in the config.
@@ -37,10 +38,9 @@ impl<'a> EnvironmentMaterializer<'a> {
         let copy_set =
             self.build_glob_set(&self.config.copies.paths.iter().cloned().collect::<Vec<_>>())?;
 
-        // TODO: Use threads to process multiple paths concurrently
-        for path in ignored {
-            self.materialize_path(&path, source, destination, &symlink_set, &copy_set)?;
-        }
+        ignored.into_par_iter().try_for_each(|path| {
+            self.materialize_path(&path, source, destination, &symlink_set, &copy_set)
+        })?;
 
         Ok(())
     }
@@ -81,14 +81,16 @@ impl<'a> EnvironmentMaterializer<'a> {
                 pattern.clone()
             };
 
-            builder.add(Glob::new(&normalized).map_err(|e| {
-                DevCloneError::InvalidGlobPattern(format!("{}: {}", pattern, e))
-            })?);
+            builder.add(
+                Glob::new(&normalized).map_err(|e| {
+                    DevCloneError::InvalidGlobPattern(format!("{}: {}", pattern, e))
+                })?,
+            );
         }
 
-        builder.build().map_err(|e| {
-            DevCloneError::GlobSetBuild(e.to_string())
-        })
+        builder
+            .build()
+            .map_err(|e| DevCloneError::GlobSetBuild(e.to_string()))
     }
 
     fn matches_glob_set(&self, path: &Path, source: &Path, glob_set: &GlobSet) -> bool {
