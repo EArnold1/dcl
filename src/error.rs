@@ -15,6 +15,12 @@ pub enum DevCloneError {
     #[error("could not determine parent directory for: {0}")]
     InvalidPath(PathBuf),
 
+    #[error("invalid glob pattern: {0}")]
+    InvalidGlobPattern(String),
+
+    #[error("failed to build glob set: {0}")]
+    GlobSetBuild(String),
+
     #[error("command `{command}` failed: {stderr}")]
     CommandFailed { command: String, stderr: String },
 
