@@ -21,6 +21,9 @@ pub enum DevCloneError {
     #[error("failed to build glob set: {0}")]
     GlobSetBuild(String),
 
+    #[error("failed to parse config: {0}")]
+    ConfigParse(String),
+
     #[error("command `{command}` failed: {stderr}")]
     CommandFailed { command: String, stderr: String },
 

@@ -1,10 +1,89 @@
-use dirs;
 use std::{fs, path::PathBuf};
 
 use crate::error::DevCloneError;
 
 const APP_NAME: &str = "devclone";
 const CONFIG_FILE: &str = "config.toml";
+const DEFAULT_CONFIG: &str = r#"
+[symlinks]
+paths = [
+    # JavaScript / TypeScript dependencies
+    '**/node_modules',
+
+    # pnpm
+    '**/.pnpm-store',
+
+    # Yarn
+    '**/.yarn/cache',
+
+    # Bun
+    '**/.bun',
+
+    # Python dependencies when used alongside JS/TS
+    '**/.venv',
+    '**/venv',
+]
+
+[copies]
+paths = [
+    # Environment configuration
+    '**/.env',
+    '**/.env.local',
+    '**/.env.development',
+    '**/.env.development.local',
+    '**/.env.test',
+    '**/.env.test.local',
+    '**/.env.production',
+    '**/.env.production.local',
+
+    # npm configuration that can affect dependency resolution
+    '**/.npmrc',
+
+    # Yarn configuration
+    '**/.yarnrc',
+    '**/.yarnrc.yml',
+
+    # Bun configuration
+    '**/bunfig.toml',
+
+    # Rust local Cargo configuration
+    '**/.cargo/config.toml',
+    '**/.cargo/config',
+]
+
+[ignore]
+paths = [
+    # Git
+    '**/.git',
+
+    # Build output
+    '**/target',
+    '**/dist',
+    '**/build',
+    '**/out',
+
+    # Framework build/cache directories
+    '**/.next',
+    '**/.nuxt',
+    '**/.angular',
+    '**/.turbo',
+    '**/.nx',
+    '**/.vite',
+    '**/.cache',
+
+    # Test / tooling caches
+    '**/.pytest_cache',
+    '**/.jest-cache',
+    '**/.vitest',
+
+    # Logs
+    '**/*.log',
+
+    # OS files
+    '**/.DS_Store',
+    '**/Thumbs.db',
+]
+"#;
 
 #[derive(Debug, Clone)]
 pub struct Paths {
@@ -34,33 +113,10 @@ impl Paths {
     }
 
     fn ensure_config(&self) -> Result<(), DevCloneError> {
-        std::fs::create_dir_all(&self.config_dir)?;
+        fs::create_dir_all(&self.config_dir)?;
 
         if !self.config_file.exists() {
-            std::fs::File::create(&self.config_file)?;
-
-            let default_config = r#"
-                [symlinks]
-                paths = [
-                    'node_modules',
-                    '.pnpm-store',
-                ]
-
-                [copies]
-                paths = [
-                    '.env',
-                    '.env.local',
-                ]
-
-                [ignore]
-                paths = [
-                    'dist',
-                    '.cache',
-                    'coverage',
-                ]
-            "#;
-
-            fs::write(&self.config_file, default_config)?;
+            fs::write(&self.config_file, DEFAULT_CONFIG)?;
         }
 
         Ok(())

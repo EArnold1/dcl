@@ -8,10 +8,8 @@ use crate::{config::loader::Config, error::DevCloneError};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use rayon::prelude::*;
 
-// The EnvironmentMaterializer happens after the project has been materialized, which is done by git.
-// This means we can just rely on the .gitignore file to determine the ignored files, and then apply the symlinks and copies as specified in the config.
-// This might change if we decide to not use git for materialization.
-// If git becomes optional, then we can do environment materialization before project materialization and not entirely rely on the .gitignore file.
+// The EnvironmentMaterializer happens after the project has been materialized.
+// We discover candidates from config symlink/copy patterns and ignore patterns in the ignore section.
 
 #[derive(Debug)]
 pub struct EnvironmentMaterializer<'a> {
@@ -24,8 +22,6 @@ impl<'a> EnvironmentMaterializer<'a> {
     }
 
     pub fn materialize(&self, source: &Path, destination: &Path) -> Result<(), DevCloneError> {
-        let ignored = self.discover_ignored(source)?;
-
         let symlink_set = self.build_glob_set(
             &self
                 .config
@@ -37,38 +33,72 @@ impl<'a> EnvironmentMaterializer<'a> {
         )?;
         let copy_set =
             self.build_glob_set(&self.config.copies.paths.iter().cloned().collect::<Vec<_>>())?;
+        let ignore_set =
+            self.build_glob_set(&self.config.ignore.paths.iter().cloned().collect::<Vec<_>>())?;
 
-        ignored.into_par_iter().try_for_each(|path| {
-            self.materialize_path(&path, source, destination, &symlink_set, &copy_set)
+        let mut materialization_paths = Vec::new();
+        self.collect_materialization_paths(
+            source,
+            source,
+            &symlink_set,
+            &copy_set,
+            &ignore_set,
+            &mut materialization_paths,
+        )?;
+
+        materialization_paths.into_par_iter().try_for_each(|path| {
+            self.materialize_path(
+                &path,
+                source,
+                destination,
+                &symlink_set,
+                &copy_set,
+                &ignore_set,
+            )
         })?;
 
         Ok(())
     }
 
-    fn discover_ignored(&self, source: &Path) -> Result<Vec<PathBuf>, DevCloneError> {
-        let contents = fs::read_to_string(source.join(".gitignore"))?;
-
-        let patterns: Vec<String> = contents
-            .lines()
-            .map(str::trim)
-            .filter(|line| !line.is_empty() && !line.starts_with('#'))
-            .map(|s| s.to_string())
-            .collect();
-
-        let glob_set = self.build_glob_set(&patterns)?;
-
-        let mut ignored_paths = Vec::new();
-
-        for entry in fs::read_dir(source)? {
+    fn collect_materialization_paths(
+        &self,
+        current: &Path,
+        source: &Path,
+        symlink_set: &GlobSet,
+        copy_set: &GlobSet,
+        ignore_set: &GlobSet,
+        materialization_paths: &mut Vec<PathBuf>,
+    ) -> Result<(), DevCloneError> {
+        // TODO: explore using WalkDir instead of recursive function
+        for entry in fs::read_dir(current)? {
             let entry = entry?;
             let path = entry.path();
 
-            if self.matches_glob_set(&path, source, &glob_set) {
-                ignored_paths.push(path);
+            if entry.file_name() == ".git" || self.matches_glob_set(&path, source, ignore_set) {
+                continue;
+            }
+
+            if self.should_materialize(&path, source, symlink_set, copy_set, ignore_set) {
+                materialization_paths.push(path.clone());
+
+                if path.is_dir() {
+                    continue;
+                }
+            }
+
+            if path.is_dir() {
+                self.collect_materialization_paths(
+                    &path,
+                    source,
+                    symlink_set,
+                    copy_set,
+                    ignore_set,
+                    materialization_paths,
+                )?;
             }
         }
 
-        Ok(ignored_paths)
+        Ok(())
     }
 
     fn build_glob_set(&self, patterns: &[String]) -> Result<GlobSet, DevCloneError> {
@@ -94,9 +124,28 @@ impl<'a> EnvironmentMaterializer<'a> {
     }
 
     fn matches_glob_set(&self, path: &Path, source: &Path, glob_set: &GlobSet) -> bool {
-        let relative_path = path.strip_prefix(source).unwrap_or(path).to_string_lossy();
+        let relative_path = path.strip_prefix(source).unwrap_or(path);
 
-        !glob_set.matches(&*relative_path).is_empty()
+        let candidate_paths = relative_path_ancestors(relative_path);
+        candidate_paths
+            .iter()
+            .any(|candidate| !glob_set.matches(&*candidate.to_string_lossy()).is_empty())
+    }
+
+    fn should_materialize(
+        &self,
+        path: &Path,
+        source: &Path,
+        symlink_set: &GlobSet,
+        copy_set: &GlobSet,
+        ignore_set: &GlobSet,
+    ) -> bool {
+        if self.matches_glob_set(path, source, ignore_set) {
+            return false;
+        }
+
+        self.matches_glob_set(path, source, symlink_set)
+            || self.matches_glob_set(path, source, copy_set)
     }
 
     fn materialize_path(
@@ -106,10 +155,18 @@ impl<'a> EnvironmentMaterializer<'a> {
         destination: &Path,
         symlink_set: &GlobSet,
         copy_set: &GlobSet,
+        ignore_set: &GlobSet,
     ) -> Result<(), DevCloneError> {
+        if self.matches_glob_set(path, source, ignore_set) {
+            return Ok(());
+        }
+
         let relative_path = path.strip_prefix(source).unwrap_or(path).to_string_lossy();
 
         let destination_path = destination.join(&*relative_path);
+        if let Some(parent) = destination_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
 
         if self.matches_glob_set(path, source, symlink_set) {
             symlink(path, &destination_path)?;
@@ -119,6 +176,20 @@ impl<'a> EnvironmentMaterializer<'a> {
 
         Ok(())
     }
+}
+
+fn relative_path_ancestors(path: &Path) -> Vec<PathBuf> {
+    let mut candidates = vec![path.to_path_buf()];
+    let mut current = path;
+
+    while let Some(parent) = current.parent() {
+        if parent != current {
+            candidates.push(parent.to_path_buf());
+        }
+        current = parent;
+    }
+
+    candidates
 }
 
 fn copy(source: &Path, destination: &Path) -> Result<(), DevCloneError> {
@@ -146,4 +217,53 @@ fn copy_dir(source: &Path, destination: &Path) -> Result<(), DevCloneError> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ignored_paths_take_precedence_over_include_patterns() {
+        let config = Config {
+            symlinks: crate::config::loader::PathConfig {
+                paths: ["packages/**".to_string()].into_iter().collect(),
+            },
+            copies: crate::config::loader::PathConfig {
+                paths: ["**/.env".to_string()].into_iter().collect(),
+            },
+            ignore: crate::config::loader::PathConfig {
+                paths: ["packages/images/node_modules".to_string()]
+                    .into_iter()
+                    .collect(),
+            },
+        };
+
+        let materializer = EnvironmentMaterializer::new(&config);
+        let source = Path::new("/tmp/project");
+        let symlink_set = materializer
+            .build_glob_set(&config.symlinks.paths.iter().cloned().collect::<Vec<_>>())
+            .unwrap();
+        let copy_set = materializer
+            .build_glob_set(&config.copies.paths.iter().cloned().collect::<Vec<_>>())
+            .unwrap();
+        let ignore_set = materializer
+            .build_glob_set(&config.ignore.paths.iter().cloned().collect::<Vec<_>>())
+            .unwrap();
+
+        assert!(materializer.should_materialize(
+            Path::new("/tmp/project/packages/app/src/main.rs"),
+            source,
+            &symlink_set,
+            &copy_set,
+            &ignore_set,
+        ));
+        assert!(!materializer.should_materialize(
+            Path::new("/tmp/project/packages/images/node_modules/react/index.js"),
+            source,
+            &symlink_set,
+            &copy_set,
+            &ignore_set,
+        ));
+    }
 }
