@@ -1,14 +1,8 @@
-mod cli;
-pub mod commands;
-pub mod config;
-pub mod discovery;
-pub mod error;
-pub mod logger;
-pub mod materialization;
+use dcl::cli;
 
 fn main() {
     if let Err(err) = cli::run() {
-        lerror!("{err}");
+        dcl::lerror!("{err}");
         std::process::exit(1);
     }
 }

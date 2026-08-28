@@ -61,3 +61,43 @@ impl Materializer<ProjectMaterialized> {
         environment.materialize(&self.request.project.root_path, &self.destination)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_revision_replaces_slashes_and_hyphens() {
+        assert_eq!(normalize_revision("docs/new-feature"), "docs_new_feature");
+        assert_eq!(normalize_revision("main"), "main");
+    }
+
+    #[test]
+    fn manage_destination_joins_parent_name_and_normalized_revision() {
+        let project = ProjectIdentity {
+            name: "my-project".to_string(),
+            root_path: PathBuf::from("/home/user/my-project"),
+        };
+
+        let destination = manage_destination(&project, "feature/x").unwrap();
+
+        assert_eq!(
+            destination,
+            PathBuf::from("/home/user/my-project_feature_x")
+        );
+    }
+
+    // This is just because we expect the root path to have a parent, which is true for most cases.
+    // If the root path is the root of the filesystem, we can't create a destination directory.
+    #[test]
+    fn manage_destination_returns_invalid_path_when_root_has_no_parent() {
+        let project = ProjectIdentity {
+            name: "root".to_string(),
+            root_path: PathBuf::from("/"),
+        };
+
+        let result = manage_destination(&project, "main");
+
+        assert!(matches!(result, Err(DevCloneError::InvalidPath(_))));
+    }
+}

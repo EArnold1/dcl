@@ -126,3 +126,62 @@ impl Paths {
         &self.config_file
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::loader::Config;
+    use tempfile::TempDir;
+
+    #[test]
+    fn new_joins_app_name_and_config_file() {
+        let paths = Paths::new().unwrap();
+
+        assert_eq!(paths.config_dir.file_name().unwrap(), APP_NAME);
+        assert_eq!(paths.config_file, paths.config_dir.join(CONFIG_FILE));
+    }
+
+    #[test]
+    fn ensure_config_creates_dir_and_writes_default_when_missing() {
+        let tmp = TempDir::new().unwrap();
+        let config_dir = tmp.path().join(APP_NAME);
+        let paths = Paths {
+            config_dir: config_dir.clone(),
+            config_file: config_dir.join(CONFIG_FILE),
+        };
+
+        paths.ensure_config().unwrap();
+
+        assert!(paths.config_dir.is_dir());
+        assert_eq!(
+            fs::read_to_string(&paths.config_file).unwrap(),
+            DEFAULT_CONFIG
+        );
+    }
+
+    #[test]
+    fn ensure_config_does_not_overwrite_existing_file() {
+        let tmp = TempDir::new().unwrap();
+        let config_dir = tmp.path().join(APP_NAME);
+        fs::create_dir_all(&config_dir).unwrap();
+        let config_file = config_dir.join(CONFIG_FILE);
+        fs::write(&config_file, "custom = true").unwrap();
+
+        let paths = Paths {
+            config_dir,
+            config_file: config_file.clone(),
+        };
+        paths.ensure_config().unwrap();
+
+        assert_eq!(fs::read_to_string(&config_file).unwrap(), "custom = true");
+    }
+
+    #[test]
+    fn default_config_parses_as_valid_config() {
+        let config: Config = toml::from_str(DEFAULT_CONFIG).unwrap();
+
+        assert!(config.symlinks.paths.contains("**/node_modules"));
+        assert!(config.copies.paths.contains("**/.env"));
+        assert!(config.ignore.paths.contains("**/.git"));
+    }
+}
