@@ -5,3 +5,4 @@ pub mod discovery;
 pub mod error;
 pub mod logger;
 pub mod materialization;
+pub mod registry;
