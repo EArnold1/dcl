@@ -1,6 +1,9 @@
 use clap::{Parser, Subcommand};
 
-use crate::{commands::create::create, error::DevCloneError};
+use crate::{
+    commands::{create::create, list::list_instances},
+    error::DevCloneError,
+};
 
 #[derive(Debug, Parser)]
 #[command(name = "dcl")]
@@ -19,6 +22,8 @@ enum Commands {
         #[arg(long)]
         git: bool,
     },
+    #[command(alias = "ls")]
+    List,
 }
 
 pub fn run() -> Result<(), DevCloneError> {
@@ -26,6 +31,7 @@ pub fn run() -> Result<(), DevCloneError> {
 
     match cli.command {
         Commands::Create { revision, git } => create(revision, git)?,
+        Commands::List => list_instances()?,
     }
 
     Ok(())

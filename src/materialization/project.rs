@@ -1,9 +1,9 @@
+use serde::{Deserialize, Serialize};
 use std::{
-    fs,
+    fmt, fs,
     path::Path,
     process::{Command, Stdio},
 };
-use serde::{Deserialize, Serialize};
 
 use crate::{commands::create::Request, error::DevCloneError, info};
 
@@ -14,13 +14,18 @@ pub enum Materialization {
     Git,
 }
 
+impl fmt::Display for Materialization {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Materialization::Archive => write!(f, "archive"),
+            Materialization::Git => write!(f, "git"),
+        }
+    }
+}
+
 impl Materialization {
     pub fn from_flag(git: bool) -> Self {
-        if git {
-            Self::Git
-        } else {
-            Self::Archive
-        }
+        if git { Self::Git } else { Self::Archive }
     }
 
     pub fn as_str(&self) -> &'static str {
