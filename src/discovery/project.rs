@@ -30,14 +30,24 @@ mod tests {
 
     #[test]
     fn discover_returns_current_dir_name_and_path() {
+        use std::sync::{Mutex, OnceLock};
+        static CWD_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        let _cwd_guard = CWD_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+
+        struct RestoreCwd(PathBuf);
+        impl Drop for RestoreCwd {
+            fn drop(&mut self) {
+                let _ = env::set_current_dir(&self.0);
+            }
+        }
+
         let tmp = TempDir::new().unwrap();
         let original_dir = env::current_dir().unwrap();
+        let _restore = RestoreCwd(original_dir);
 
         env::set_current_dir(tmp.path()).unwrap();
-        let result = ProjectIdentity::discover();
-        env::set_current_dir(original_dir).unwrap();
+        let identity = ProjectIdentity::discover().unwrap();
 
-        let identity = result.unwrap();
         assert_eq!(identity.root_path.file_name(), tmp.path().file_name());
         assert_eq!(
             identity.name,
