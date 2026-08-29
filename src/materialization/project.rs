@@ -6,6 +6,7 @@ use std::{
 };
 
 use crate::{commands::create::Request, error::DevCloneError, info};
+use tar::Archive;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -44,7 +45,7 @@ impl Materialization {
 }
 
 fn materialize_archive(request: &Request, destination: &Path) -> Result<(), DevCloneError> {
-    let mut archive = Command::new("git")
+    let mut archive_process = Command::new("git")
         .arg("-C")
         .arg(&request.project.root_path)
         .arg("archive")
@@ -52,32 +53,28 @@ fn materialize_archive(request: &Request, destination: &Path) -> Result<(), DevC
         .stdout(Stdio::piped())
         .spawn()?;
 
-    let archive_stdout = archive.stdout.take().ok_or(DevCloneError::CommandFailed {
-        command: "git archive".into(),
-        stderr: "Failed to capture stdout".into(),
-    })?;
+    let archive_stdout = archive_process
+        .stdout
+        .take()
+        .ok_or(DevCloneError::CommandFailed {
+            command: "git archive".into(),
+            stderr: "Failed to capture stdout".into(),
+        })?;
 
-    let mut tar = Command::new("tar")
-        .arg("-x")
-        .arg("-C")
-        .arg(destination)
-        .stdin(archive_stdout)
-        .spawn()?;
+    let mut archive = Archive::new(archive_stdout);
+    archive
+        .unpack(destination)
+        .map_err(|e| DevCloneError::CommandFailed {
+            command: "tar extraction".into(),
+            stderr: e.to_string(),
+        })?;
 
-    let archive_status = archive.wait()?;
-    let tar_status = tar.wait()?;
+    let archive_status = archive_process.wait()?;
 
     if !archive_status.success() {
         return Err(DevCloneError::CommandFailed {
             command: "git archive".into(),
             stderr: "git archive failed".into(),
-        });
-    }
-
-    if !tar_status.success() {
-        return Err(DevCloneError::CommandFailed {
-            command: "tar extraction".into(),
-            stderr: "tar extraction failed".into(),
         });
     }
 
