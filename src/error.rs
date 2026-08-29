@@ -39,6 +39,11 @@ pub enum DevCloneError {
     #[error("no managed instance found matching: {0}")]
     InstanceNotFound(String),
 
-    #[error("multiple instances match '{target}': {candidates:?}; specify the full destination path to disambiguate")]
-    AmbiguousTarget { target: String, candidates: Vec<String> },
+    #[error(
+        "multiple instances match '{target}': {candidates:?}; specify the full destination path to disambiguate"
+    )]
+    AmbiguousTarget {
+        target: String,
+        candidates: Vec<String>,
+    },
 }

@@ -147,4 +147,3 @@ impl Paths {
         &self.registry_file
     }
 }
-

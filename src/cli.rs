@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 
 use crate::{
-    commands::{create::create, list::list_instances},
+    commands::{create::create, list::list_instances, remove::remove},
     error::DevCloneError,
 };
 
@@ -24,6 +24,13 @@ enum Commands {
     },
     #[command(alias = "ls")]
     List,
+    #[command(alias = "rm")]
+    Remove {
+        target: String,
+
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
 }
 
 pub fn run() -> Result<(), DevCloneError> {
@@ -32,6 +39,7 @@ pub fn run() -> Result<(), DevCloneError> {
     match cli.command {
         Commands::Create { revision, git } => create(revision, git)?,
         Commands::List => list_instances()?,
+        Commands::Remove { target, yes } => remove(target, yes)?,
     }
 
     Ok(())
@@ -81,6 +89,53 @@ mod tests {
     #[test]
     fn unknown_subcommand_fails_to_parse() {
         let result = Cli::try_parse_from(["dcl", "bogus"]);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn remove_parses_target_without_yes_flag() {
+        let cli = Cli::try_parse_from(["dcl", "remove", "my_instance"]).unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Commands::Remove { target, yes } if target == "my_instance" && !yes
+        ));
+    }
+
+    #[test]
+    fn remove_parses_yes_flag() {
+        let cli = Cli::try_parse_from(["dcl", "remove", "my_instance", "--yes"]).unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Commands::Remove { target, yes } if target == "my_instance" && yes
+        ));
+    }
+
+    #[test]
+    fn remove_parses_y_flag() {
+        let cli = Cli::try_parse_from(["dcl", "remove", "my_instance", "-y"]).unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Commands::Remove { target, yes } if target == "my_instance" && yes
+        ));
+    }
+
+    #[test]
+    fn remove_alias_rm_parses_same_as_remove() {
+        let cli = Cli::try_parse_from(["dcl", "rm", "my_instance", "-y"]).unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Commands::Remove { target, yes } if target == "my_instance" && yes
+        ));
+    }
+
+    #[test]
+    fn remove_without_target_fails_to_parse() {
+        let result = Cli::try_parse_from(["dcl", "remove"]);
 
         assert!(result.is_err());
     }
