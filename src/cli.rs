@@ -94,6 +94,20 @@ mod tests {
     }
 
     #[test]
+    fn list_parses_without_arguments() {
+        let cli = Cli::try_parse_from(["dcl", "list"]).unwrap();
+
+        assert!(matches!(cli.command, Commands::List));
+    }
+
+    #[test]
+    fn list_alias_ls_parses_same_as_list() {
+        let cli = Cli::try_parse_from(["dcl", "ls"]).unwrap();
+
+        assert!(matches!(cli.command, Commands::List));
+    }
+
+    #[test]
     fn remove_parses_target_without_yes_flag() {
         let cli = Cli::try_parse_from(["dcl", "remove", "my_instance"]).unwrap();
 
