@@ -182,7 +182,9 @@ mod tests {
 
         assert!(matches!(
             cli.command,
-            Commands::Config { action: ConfigAction::Show }
+            Commands::Config {
+                action: ConfigAction::Show
+            }
         ));
     }
 
@@ -192,7 +194,9 @@ mod tests {
 
         assert!(matches!(
             cli.command,
-            Commands::Config { action: ConfigAction::Path }
+            Commands::Config {
+                action: ConfigAction::Path
+            }
         ));
     }
 
@@ -202,7 +206,9 @@ mod tests {
 
         assert!(matches!(
             cli.command,
-            Commands::Config { action: ConfigAction::Edit }
+            Commands::Config {
+                action: ConfigAction::Edit
+            }
         ));
     }
 
@@ -212,7 +218,9 @@ mod tests {
 
         assert!(matches!(
             cli.command,
-            Commands::Config { action: ConfigAction::Reset { yes: true } }
+            Commands::Config {
+                action: ConfigAction::Reset { yes: true }
+            }
         ));
     }
 
@@ -222,7 +230,9 @@ mod tests {
 
         assert!(matches!(
             cli.command,
-            Commands::Config { action: ConfigAction::Reset { yes: true } }
+            Commands::Config {
+                action: ConfigAction::Reset { yes: true }
+            }
         ));
     }
 
@@ -232,7 +242,9 @@ mod tests {
 
         assert!(matches!(
             cli.command,
-            Commands::Config { action: ConfigAction::Reset { yes: false } }
+            Commands::Config {
+                action: ConfigAction::Reset { yes: false }
+            }
         ));
     }
 
@@ -242,7 +254,9 @@ mod tests {
 
         assert!(matches!(
             cli.command,
-            Commands::Config { action: ConfigAction::Show }
+            Commands::Config {
+                action: ConfigAction::Show
+            }
         ));
     }
 }
