@@ -5,7 +5,7 @@ use crate::error::DevCloneError;
 const APP_NAME: &str = "devclone";
 const CONFIG_FILE: &str = "config.toml";
 const REGISTRY_FILE: &str = "registry.toml";
-const DEFAULT_CONFIG: &str = r#"
+pub const DEFAULT_CONFIG: &str = r#"
 [symlinks]
 paths = [
     # JavaScript / TypeScript dependencies

@@ -46,4 +46,10 @@ pub enum DevCloneError {
         target: String,
         candidates: Vec<String>,
     },
+
+    #[error("editor command failed")]
+    EditorFailed,
+
+    #[error("editor not found: {0}")]
+    EditorNotFound(String),
 }

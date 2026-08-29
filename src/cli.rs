@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 
 use crate::{
-    commands::{create::create, list::list_instances, remove::remove},
+    commands::{config, create::create, list::list_instances, remove::remove},
     error::DevCloneError,
 };
 
@@ -31,6 +31,22 @@ enum Commands {
         #[arg(short = 'y', long)]
         yes: bool,
     },
+    #[command(alias = "cfg")]
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum ConfigAction {
+    Show,
+    Path,
+    Edit,
+    Reset {
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
 }
 
 pub fn run() -> Result<(), DevCloneError> {
@@ -40,6 +56,12 @@ pub fn run() -> Result<(), DevCloneError> {
         Commands::Create { revision, git } => create(revision, git)?,
         Commands::List => list_instances()?,
         Commands::Remove { target, yes } => remove(target, yes)?,
+        Commands::Config { action } => match action {
+            ConfigAction::Show => config::show_config()?,
+            ConfigAction::Path => config::show_config_path()?,
+            ConfigAction::Edit => config::edit_config()?,
+            ConfigAction::Reset { yes } => config::reset_config(yes)?,
+        },
     }
 
     Ok(())
@@ -152,5 +174,75 @@ mod tests {
         let result = Cli::try_parse_from(["dcl", "remove"]);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn config_show_parses() {
+        let cli = Cli::try_parse_from(["dcl", "config", "show"]).unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Commands::Config { action: ConfigAction::Show }
+        ));
+    }
+
+    #[test]
+    fn config_path_parses() {
+        let cli = Cli::try_parse_from(["dcl", "config", "path"]).unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Commands::Config { action: ConfigAction::Path }
+        ));
+    }
+
+    #[test]
+    fn config_edit_parses() {
+        let cli = Cli::try_parse_from(["dcl", "config", "edit"]).unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Commands::Config { action: ConfigAction::Edit }
+        ));
+    }
+
+    #[test]
+    fn config_reset_parses_with_yes_flag() {
+        let cli = Cli::try_parse_from(["dcl", "config", "reset", "-y"]).unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Commands::Config { action: ConfigAction::Reset { yes: true } }
+        ));
+    }
+
+    #[test]
+    fn config_reset_parses_with_long_yes_flag() {
+        let cli = Cli::try_parse_from(["dcl", "config", "reset", "--yes"]).unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Commands::Config { action: ConfigAction::Reset { yes: true } }
+        ));
+    }
+
+    #[test]
+    fn config_reset_without_yes_flag_defaults_to_false() {
+        let cli = Cli::try_parse_from(["dcl", "config", "reset"]).unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Commands::Config { action: ConfigAction::Reset { yes: false } }
+        ));
+    }
+
+    #[test]
+    fn config_alias_cfg_parses_same_as_config() {
+        let cli = Cli::try_parse_from(["dcl", "cfg", "show"]).unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Commands::Config { action: ConfigAction::Show }
+        ));
     }
 }
