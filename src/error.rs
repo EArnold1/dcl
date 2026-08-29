@@ -29,4 +29,21 @@ pub enum DevCloneError {
 
     #[error("destination already exists: {0}")]
     DestinationExists(PathBuf),
+
+    #[error("failed to parse registry: {0}")]
+    RegistryParse(String),
+
+    #[error("failed to write registry: {0}")]
+    RegistryWrite(String),
+
+    #[error("no managed instance found matching: {0}")]
+    InstanceNotFound(String),
+
+    #[error(
+        "multiple instances match '{target}': {candidates:?}; specify the full destination path to disambiguate"
+    )]
+    AmbiguousTarget {
+        target: String,
+        candidates: Vec<String>,
+    },
 }

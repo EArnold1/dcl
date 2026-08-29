@@ -1,3 +1,4 @@
+pub mod cleanup;
 pub mod cli;
 pub mod commands;
 pub mod config;
@@ -5,3 +6,4 @@ pub mod discovery;
 pub mod error;
 pub mod logger;
 pub mod materialization;
+pub mod registry;

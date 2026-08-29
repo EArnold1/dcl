@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::{
     commands::create::Request,
@@ -11,7 +11,7 @@ pub struct Pending;
 pub struct ProjectMaterialized;
 
 pub struct Materializer<S> {
-    request: Request,
+    pub request: Request,
     destination: PathBuf,
     _state: S,
 }
@@ -30,6 +30,12 @@ fn manage_destination(project: &ProjectIdentity, revision: &str) -> Result<PathB
         .ok_or(DevCloneError::InvalidPath(project.root_path.clone()))?;
 
     Ok(parent.join(format!("{}_{}", project.name, normalize_revision(revision))))
+}
+
+impl<S> Materializer<S> {
+    pub fn destination(&self) -> &Path {
+        &self.destination
+    }
 }
 
 impl Materializer<Pending> {

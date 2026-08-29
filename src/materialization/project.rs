@@ -1,17 +1,40 @@
+use serde::{Deserialize, Serialize};
 use std::{
-    fs,
+    fmt, fs,
     path::Path,
     process::{Command, Stdio},
 };
 
 use crate::{commands::create::Request, error::DevCloneError, info};
 
-enum Materialization {
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Materialization {
     Archive,
     Git,
 }
 
+impl fmt::Display for Materialization {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Materialization::Archive => write!(f, "archive"),
+            Materialization::Git => write!(f, "git"),
+        }
+    }
+}
+
 impl Materialization {
+    pub fn from_flag(git: bool) -> Self {
+        if git { Self::Git } else { Self::Archive }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Archive => "archive",
+            Self::Git => "git",
+        }
+    }
+
     fn execute(&self, request: &Request, destination: &Path) -> Result<(), DevCloneError> {
         match self {
             Self::Archive => materialize_archive(request, destination),
@@ -123,12 +146,7 @@ impl<'a> ProjectMaterializer<'a> {
             }
         }
 
-        let strategy = if self.request.git {
-            Materialization::Git
-        } else {
-            Materialization::Archive
-        };
-
+        let strategy = Materialization::from_flag(self.request.git);
         strategy.execute(self.request, self.destination)
     }
 }
