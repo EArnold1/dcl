@@ -52,4 +52,11 @@ pub enum DevCloneError {
 
     #[error("editor not found: {0}")]
     EditorNotFound(String),
+
+    #[error("failed to create symlink from {target:?} to {link:?}: {reason}")]
+    SymlinkFailed {
+        target: PathBuf,
+        link: PathBuf,
+        reason: String,
+    },
 }

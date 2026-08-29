@@ -1,10 +1,11 @@
 use std::{
     fs,
-    os::unix::fs::symlink,
     path::{Path, PathBuf},
 };
 
-use crate::{config::loader::Config, error::DevCloneError};
+use crate::{
+    config::loader::Config, error::DevCloneError, materialization::symlink::create_symlink,
+};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use rayon::prelude::*;
 
@@ -169,7 +170,7 @@ impl<'a> EnvironmentMaterializer<'a> {
         }
 
         if self.matches_glob_set(path, source, symlink_set) {
-            symlink(path, &destination_path)?;
+            create_symlink(path, &destination_path)?;
         } else if self.matches_glob_set(path, source, copy_set) {
             copy(path, &destination_path)?;
         }
@@ -405,6 +406,7 @@ mod tests {
         assert!(paths.contains(&source.join(".env")));
     }
 
+    #[cfg(unix)]
     #[test]
     fn collect_materialization_paths_does_not_descend_into_ignored_directories() {
         use std::os::unix::fs::PermissionsExt;

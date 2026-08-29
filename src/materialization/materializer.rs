@@ -19,8 +19,16 @@ pub struct Materializer<S> {
 /// normalize revision for creating the destination directory
 ///
 /// `e.g` docs/new-feature -> docs_new_feature
+/// Sanitizes Windows reserved filename characters to ensure compatibility
 fn normalize_revision(revision: &str) -> String {
-    revision.replace('/', "_").replace("-", "_")
+    revision
+        .replace(['/', '-'], "_")
+        .chars()
+        .map(|c| match c {
+            '<' | '>' | ':' | '"' | '|' | '?' | '*' => '_',
+            _ => c,
+        })
+        .collect()
 }
 
 fn manage_destination(project: &ProjectIdentity, revision: &str) -> Result<PathBuf, DevCloneError> {
@@ -76,6 +84,18 @@ mod tests {
     fn normalize_revision_replaces_slashes_and_hyphens() {
         assert_eq!(normalize_revision("docs/new-feature"), "docs_new_feature");
         assert_eq!(normalize_revision("main"), "main");
+    }
+
+    #[test]
+    fn normalize_revision_removes_windows_reserved_chars() {
+        assert_eq!(normalize_revision("feat<bugfix>"), "feat_bugfix_");
+        assert_eq!(normalize_revision("feature:test"), "feature_test");
+        assert_eq!(normalize_revision("branch?name"), "branch_name");
+        assert_eq!(normalize_revision("repo|mirror"), "repo_mirror");
+        assert_eq!(
+            normalize_revision("complex<feature:test|branch?name>"),
+            "complex_feature_test_branch_name_"
+        );
     }
 
     #[test]
