@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g., 0.2.0)"
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  dist:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    name: dist (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+
+          - os: macos-latest
+            target: x86_64-apple-darwin
+
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-dist
+        run: cargo install cargo-dist
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*= "//' | sed 's/".*//')
+          echo "version=v${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Check if release exists
+        id: check_release
+        continue-on-error: true
+        run: gh release view ${{ steps.version.outputs.version }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run cargo-dist
+        if: steps.check_release.outcome == 'failure'
+        run: cargo dist build --tag ${{ steps.version.outputs.version }}
+
+      - name: Create Release
+        if: steps.check_release.outcome == 'failure'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          files: target/dist/**
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

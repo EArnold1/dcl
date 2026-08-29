@@ -14,6 +14,28 @@ The result is that you end up with multiple copies of the same dependencies and 
 
 `dcl` solves this by creating a new local project clone and allowing reusable parts of the existing environment to be **symlinked instead of copied**.
 
+## Installation
+
+### From GitHub Releases
+
+**macOS/Linux:**
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/EArnold1/devclone/releases/latest/download/dcl-installer.sh | sh
+```
+
+**Windows (PowerShell):**
+```powershell
+powershell -c "irm https://github.com/EArnold1/devclone/releases/latest/download/dcl-installer.ps1 | iex"
+```
+
+### From Source
+
+If you have Rust installed:
+
+```bash
+cargo install --git https://github.com/EArnold1/devclone
+```
+
 For example:
 
 ```text
