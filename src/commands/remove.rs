@@ -1,33 +1,20 @@
+use crate::cleanup::cleanup;
 use crate::error::DevCloneError;
 use crate::info;
 use crate::registry::Registry;
-use crate::warn;
-use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
 
 pub fn remove(target: String, yes: bool) -> Result<(), DevCloneError> {
-    let mut registry = Registry::load()?;
-    let instance = registry.resolve(&target)?.clone();
-
-    if !yes && !confirm(&instance.name, &instance.destination) {
-        info!("Aborted.");
-        return Ok(());
+    if !yes {
+        let registry = Registry::load()?;
+        let instance = registry.resolve(&target)?; // clone to end the immutable borrow
+        if !confirm(&instance.name, &instance.destination) {
+            info!("Aborted.");
+            return Ok(());
+        }
     }
-
-    if instance.destination.exists() {
-        fs::remove_dir_all(&instance.destination)?;
-    } else {
-        warn!(
-            "Instance directory {:?} does not exist; removing registry entry only.",
-            instance.destination
-        );
-    }
-
-    registry.remove(&instance.destination);
-    registry.save()?;
-    info!("Removed instance '{}'.", instance.name);
-    Ok(())
+    cleanup(&target)
 }
 
 /// Prompts the user for confirmation to remove an instance.

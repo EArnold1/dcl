@@ -1,4 +1,5 @@
 use crate::{
+    cleanup::cleanup_filesystem,
     config::loader::Config,
     discovery::project::ProjectIdentity,
     error::DevCloneError,
@@ -51,9 +52,12 @@ pub fn create(revision: String, git: bool) -> Result<(), DevCloneError> {
     if let Some(entry) = registry.find_mut_by_destination(&destination) {
         entry.status = match &result {
             Ok(()) => InstanceStatus::Ready,
-            Err(err) => InstanceStatus::Failed {
-                reason: err.to_string(),
-            }, // TODO: during failures, already generated instances should be cleaned up
+            Err(err) => {
+                let _ = cleanup_filesystem(&destination);
+                InstanceStatus::Failed {
+                    reason: err.to_string(),
+                }
+            }
         };
     }
     registry.save()?;
