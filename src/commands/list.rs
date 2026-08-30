@@ -33,7 +33,7 @@ pub fn list_instances() -> Result<(), DevCloneError> {
             .load_style(NOTHING)
             .set_header(["NAME", "MODE", "REVISION", "STATUS", "AGE", "SOURCE"]);
 
-        for instance in instances {
+        instances.iter().for_each(|instance| {
             table.add_row([
                 &instance.name,
                 &instance.mode.to_string(),
@@ -42,7 +42,7 @@ pub fn list_instances() -> Result<(), DevCloneError> {
                 &format_age(instance.created_at),
                 &instance.source.display().to_string(),
             ]);
-        }
+        });
         println!("{}", table);
     }
 
