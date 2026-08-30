@@ -18,14 +18,46 @@ The result is that you end up with multiple copies of the same dependencies and 
 
 ### From GitHub Releases
 
-**macOS/Linux:**
+Download the archive for your platform from the [latest release](https://github.com/EArnold1/dcl/releases/latest).
+
+**macOS (Apple Silicon):**
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/EArnold1/devclone/releases/latest/download/dcl-installer.sh | sh
+curl -LO https://github.com/EArnold1/dcl/releases/latest/download/dcl-aarch64-apple-darwin.tar.gz
+tar xzf dcl-aarch64-apple-darwin.tar.gz
+sudo mv dcl-aarch64-apple-darwin/dcl /usr/local/bin/
 ```
 
-**Windows (PowerShell):**
-```powershell
-powershell -c "irm https://github.com/EArnold1/devclone/releases/latest/download/dcl-installer.ps1 | iex"
+**macOS (Intel):**
+```bash
+curl -LO https://github.com/EArnold1/dcl/releases/latest/download/dcl-x86_64-apple-darwin.tar.gz
+tar xzf dcl-x86_64-apple-darwin.tar.gz
+sudo mv dcl-x86_64-apple-darwin/dcl /usr/local/bin/
+```
+
+**Linux (x86_64):**
+```bash
+curl -LO https://github.com/EArnold1/dcl/releases/latest/download/dcl-x86_64-unknown-linux-gnu.tar.gz
+tar xzf dcl-x86_64-unknown-linux-gnu.tar.gz
+sudo mv dcl-x86_64-unknown-linux-gnu/dcl /usr/local/bin/
+```
+
+**Linux (aarch64):**
+```bash
+curl -LO https://github.com/EArnold1/dcl/releases/latest/download/dcl-aarch64-unknown-linux-gnu.tar.gz
+tar xzf dcl-aarch64-unknown-linux-gnu.tar.gz
+sudo mv dcl-aarch64-unknown-linux-gnu/dcl /usr/local/bin/
+```
+
+**Windows:**
+
+1. Download [`dcl-x86_64-pc-windows-msvc.zip`](https://github.com/EArnold1/dcl/releases/latest/download/dcl-x86_64-pc-windows-msvc.zip).
+2. Extract the archive.
+3. Move `dcl.exe` into a directory on your `PATH`.
+
+Each archive has a matching `.sha256` checksum file. Verify a download with, e.g.:
+
+```bash
+shasum -a 256 -c dcl-x86_64-apple-darwin.tar.gz.sha256
 ```
 
 ### From Source
@@ -33,7 +65,7 @@ powershell -c "irm https://github.com/EArnold1/devclone/releases/latest/download
 If you have Rust installed:
 
 ```bash
-cargo install --git https://github.com/EArnold1/devclone
+cargo install --git https://github.com/EArnold1/dcl
 ```
 
 For example:

@@ -1,82 +1,109 @@
 name: Release
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types:
-      - completed
-    branches:
-      - main
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Version to release (e.g., 0.2.0)"
-        required: false
+  push:
+    tags:
+      - "v*.*.*"
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
-  dist:
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
-    name: dist (${{ matrix.target }})
+  build:
+    name: Build (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
-            target: aarch64-apple-darwin
-
-          - os: macos-latest
-            target: x86_64-apple-darwin
-
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - uses: Swatinem/rust-cache@v2
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
 
-      - name: Install cargo-dist
-        run: cargo install cargo-dist && mv ~/.cargo/bin/dist ~/.cargo/bin/cargo-dist 2>/dev/null || true
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Get version
-        id: version
+      - name: Stage package
+        shell: bash
         run: |
-          VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*= "//' | sed 's/".*//')
-          echo "version=v${VERSION}" >> $GITHUB_OUTPUT
+          staging="dcl-${{ matrix.target }}"
+          mkdir -p "$staging"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp "target/${{ matrix.target }}/release/dcl.exe" "$staging/"
+          else
+            cp "target/${{ matrix.target }}/release/dcl" "$staging/"
+          fi
+          cp README.md LICENSE "$staging/"
+          echo "STAGING=$staging" >> "$GITHUB_ENV"
 
-      - name: Check if release exists
-        id: check_release
-        continue-on-error: true
-        run: gh release view ${{ steps.version.outputs.version }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create archive (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          tar czf "${STAGING}.tar.gz" "${STAGING}"
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${STAGING}.tar.gz" > "${STAGING}.tar.gz.sha256"
+          else
+            shasum -a 256 "${STAGING}.tar.gz" > "${STAGING}.tar.gz.sha256"
+          fi
 
-      - name: Run cargo-dist
-        if: steps.check_release.outcome == 'failure'
-        run: cargo dist build --tag ${{ steps.version.outputs.version }}
+      - name: Create archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "${env:STAGING}" -DestinationPath "${env:STAGING}.zip"
+          $hash = Get-FileHash -Algorithm SHA256 -Path "${env:STAGING}.zip"
+          "$($hash.Hash.ToLower())  ${env:STAGING}.zip" | Out-File -Encoding ascii "${env:STAGING}.zip.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dcl-${{ matrix.target }}
+          path: dcl-${{ matrix.target }}.*
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
 
       - name: Create Release
-        if: steps.check_release.outcome == 'failure'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.version }}
-          files: target/dist/**
+          tag_name: ${{ github.ref_name }}
           generate_release_notes: true
+          files: artifacts/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

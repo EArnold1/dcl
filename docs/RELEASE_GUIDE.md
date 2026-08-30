@@ -1,48 +1,47 @@
 # Release Guide for `dcl`
 
-This guide describes the automated release process and how to execute releases for the `dcl` project.
+This guide describes the release process for the `dcl` project: hand-rolled GitHub Actions, triggered by pushing a version tag. There is no `cargo-dist` involved.
 
 ## Overview
 
-`dcl` uses `cargo-dist` for cross-platform binary distribution via GitHub Releases. The release workflow is automated and triggers on pushes to `main` when the version in `Cargo.toml` changes.
+Pushing a tag matching `v*.*.*` (e.g. `v0.2.0`) triggers `.github/workflows/release.yml`, which:
+
+1. Builds release binaries for five targets in parallel (`build` job, matrix).
+2. Stages each binary with `README.md` and `LICENSE`, archives it (`.tar.gz` on macOS/Linux, `.zip` on Windows), and generates a `.sha256` checksum.
+3. Uploads each archive as a GitHub Actions artifact.
+4. A single `release` job (`needs: build`) downloads all artifacts and creates exactly **one** GitHub Release, attaching every archive and checksum, with auto-generated release notes.
 
 ### Supported Platforms
 
-- macOS Intel (x86_64)
-- macOS Apple Silicon (aarch64)
-- Linux x86_64 (glibc)
-- Linux aarch64 (glibc)
-- Windows x86_64 (MSVC)
+| Target | Runner |
+|---|---|
+| `aarch64-apple-darwin` (macOS Apple Silicon) | `macos-latest` |
+| `x86_64-apple-darwin` (macOS Intel) | `macos-latest` |
+| `x86_64-unknown-linux-gnu` | `ubuntu-latest` |
+| `aarch64-unknown-linux-gnu` | `ubuntu-24.04-arm` (native ARM64, no Docker/`cross`) |
+| `x86_64-pc-windows-msvc` | `windows-latest` |
 
 ### Artifacts Generated per Release
 
-- Prebuilt binaries for all platforms (tarballs on Unix, zip on Windows)
-- Shell installer script (`dcl-installer.sh`) for macOS/Linux
-- PowerShell installer script (`dcl-installer.ps1`) for Windows
-- GitHub Release with all binaries and installer scripts
+- `dcl-<target>.tar.gz` (macOS/Linux) or `dcl-<target>.zip` (Windows), each containing `dcl` (or `dcl.exe`), `README.md`, and `LICENSE`.
+- A matching `dcl-<target>.tar.gz.sha256` / `.zip.sha256` checksum file per archive.
+- No installer scripts — users download and extract manually.
 
 ## Release Process
 
 ### Step 1: Prepare Your Changes
 
-Ensure all desired features and fixes are merged into `main`:
-
 ```bash
 git switch main
 git pull origin main
-```
-
-Run tests and verify everything works:
-
-```bash
 cargo test
-cargo clippy
-cargo fmt --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo fmt --all -- --check
 ```
 
 ### Step 2: Bump the Version
 
-Edit `Cargo.toml` and update the version number following [Semantic Versioning](https://semver.org/):
+Edit `Cargo.toml`:
 
 ```toml
 [package]
@@ -52,160 +51,100 @@ version = "0.2.0"  # was 0.1.0
 
 ### Step 3: Commit the Version Bump
 
-Commit the version change:
-
 ```bash
-git add Cargo.toml
+git add Cargo.toml Cargo.lock
 git commit -m "chore: bump version to 0.2.0"
 ```
 
-### Step 4: Push to Main
+### Step 4: Tag and Push
 
-Push the commit to `main`:
+The tag **must** match `v<version-from-Cargo.toml>` — the workflow does not read `Cargo.toml` to determine the release version, it uses the pushed tag directly (`github.ref_name`).
 
 ```bash
-git push origin main
+git tag v0.2.0
+git push origin main --tags
 ```
 
-### Step 5: Automated Release Workflow
+This single command pushes both the commit and the tag; the tag push is what triggers the `Release` workflow. (The `CI` workflow also runs separately on the `push to main`, as before — the two workflows are independent.)
 
-Once you push to `main`, the CI workflow runs first (tests, clippy, formatting on all platforms). After CI completes successfully, the GitHub Actions release workflow automatically triggers and:
+### Step 5: Watch the Workflow
 
-1. **Detects the version change** by reading `Cargo.toml`
-2. **Checks if the release already exists** to avoid duplicates
-3. **Runs cargo-dist** to build cross-platform binaries:
-   - Compiles for all target platforms
-   - Generates installer scripts
-   - Creates tarballs/zips
-4. **Creates a GitHub Release** with:
-   - Auto-generated release notes (from commits since last release)
-   - All prebuilt binaries
-   - Installer scripts
+Go to **Actions → Release** and confirm:
+- All 5 `Build (<target>)` jobs succeed.
+- The single `Create GitHub Release` job succeeds after all builds finish.
 
 ### Step 6: Verify the Release
 
-After the workflow completes (check GitHub Actions tab):
-
-1. Navigate to [Releases](https://github.com/EArnold1/devclone/releases)
-2. Verify the new release is published with all platforms
-3. Download and test a binary locally:
+1. Open <https://github.com/EArnold1/dcl/releases> and confirm the new release has 5 archives + 5 checksum files attached (10 assets total).
+2. Download and smoke-test a binary:
 
    ```bash
-   # Example: macOS x86_64
-   tar xzf dcl-v0.2.0-x86_64-apple-darwin.tar.gz
-   ./dcl --version
+   curl -LO https://github.com/EArnold1/dcl/releases/download/v0.2.0/dcl-x86_64-apple-darwin.tar.gz
+   tar xzf dcl-x86_64-apple-darwin.tar.gz
+   ./dcl-x86_64-apple-darwin/dcl --version
    ```
-
-4. Test the installer script (optional):
-
-   ```bash
-   # For macOS/Linux
-   curl --proto '=https' --tlsv1.2 -LsSf https://github.com/EArnold1/devclone/releases/download/v0.2.0/dcl-installer.sh | sh
-   ```
-
-## Manual Release Trigger
-
-If needed, you can manually trigger a release without waiting for CI:
-
-1. Go to **Actions** → **Release**
-2. Click **Run workflow**
-3. (Optional) Specify a version in the input field
-4. Click **Run workflow**
-
-This is useful for:
-- Re-releasing if the workflow failed or you need to force a release
-- Testing the release process
-- Rebuilding an existing release version for a platform that failed
 
 ## Troubleshooting
 
-### Release Workflow Doesn't Trigger
+### Tag doesn't match the version in `Cargo.toml`
 
-**Symptom**: You pushed to `main` but no release is being created.
+**Symptom**: You tagged `v0.2.0` but forgot to bump `Cargo.toml`, or vice versa — the release gets created with the wrong version baked into the binary (`dcl --version` reports the old number), or the tag itself is just wrong.
 
-**Cause**: The CI workflow failed, a release with that version already exists, or the version in `Cargo.toml` hasn't changed.
-
-**Solution**:
-- Check that the **CI workflow** passed successfully on `main` (the release workflow only runs after CI succeeds)
-- Verify you updated `Cargo.toml` with a new version
-- Check if a release with that version already exists on the Releases page
-- Check GitHub Actions logs for the exact error
-
-### Build Fails on a Specific Platform
-
-**Symptom**: The workflow completes but only some platforms' binaries are available.
-
-**Cause**: The build failed for that platform (e.g., Windows compilation error).
+**Cause**: The release tag and `Cargo.toml`'s `version` field are two independent, manually-synchronized values — nothing in the workflow currently cross-checks them.
 
 **Solution**:
-- Check the GitHub Actions workflow run logs
-- Look for the failing job (e.g., "dist (x86_64-pc-windows-msvc)")
-- Fix the issue locally, commit, and re-push to trigger the workflow again
+- Before tagging, double check `grep '^version' Cargo.toml` matches the tag you're about to push.
+- If you already pushed a wrong tag: delete the tag locally and on the remote (`git tag -d vX.Y.Z && git push origin :refs/tags/vX.Y.Z`), delete the resulting GitHub Release if one was created, fix `Cargo.toml`, and re-tag.
+- (Optional future hardening: add a cheap `run` step at the top of the `build` job that parses `Cargo.toml` and fails fast if it doesn't match `github.ref_name`.)
 
-### Installer Script Returns 404
+### Release job fails to find artifacts
 
-**Symptom**: Running the installer script fails with a 404 error.
+**Symptom**: The `Create GitHub Release` job fails, or the release is missing some platform's archive.
 
-**Cause**: The release wasn't fully uploaded yet, or the URL is incorrect.
+**Cause**: One or more `build` matrix jobs failed (check each job individually — `fail-fast: false` means the others still ran), or `actions/download-artifact` didn't find anything because every `build` job failed.
 
 **Solution**:
-- Wait a few minutes for the release to fully propagate
-- Verify the release version in the URL matches the GitHub release
-- Check that the release exists on the Releases page with binaries attached
+- Open the failed `Build (<target>)` job's logs and fix the underlying build error.
+- Re-run only the failed jobs from the Actions UI, or push a new patch tag after fixing.
+- Confirm each `build` job actually produced a non-empty `dcl-<target>.tar.gz`/`.zip` before the `Upload artifact` step (the workflow uses `if-no-files-found: error` there specifically to catch this early rather than silently skipping).
+
+### Native ARM64 Linux runner (`ubuntu-24.04-arm`) unavailable
+
+**Symptom**: The `aarch64-unknown-linux-gnu` job fails to even start, or GitHub reports the runner label as invalid/unavailable.
+
+**Cause**: `ubuntu-24.04-arm` hosted runners are free and generally available for public repositories as of 2025, but availability could change if the repo becomes private (still usable, billed at the same per-minute rate as `ubuntu-latest` — no extra multiplier for Linux ARM64) or if GitHub changes runner offerings.
+
+**Fallback** (not currently implemented, documented here for reference): cross-compile using the [`cross`](https://github.com/cross-rs/cross) tool with Docker on a regular `ubuntu-latest` runner, per the [Rust CLI book's approach](https://rust-cli.github.io/book/tutorial/packaging.html#distributing-binaries). This is more complex (requires Docker-in-Docker on the runner and a `Cross.toml`) and was intentionally avoided while native ARM64 runners are available.
+
+### Build fails on a specific platform
+
+**Solution**: same as before — check that job's logs, fix locally, commit, re-tag (or delete and re-push the same tag if you deleted the bad release first).
 
 ## Version Numbering
 
 Follow [Semantic Versioning](https://semver.org/):
 
-- **MAJOR** (e.g., 1.0.0): Breaking changes to the CLI interface or behavior
-- **MINOR** (e.g., 0.2.0): New features, backward compatible
-- **PATCH** (e.g., 0.1.1): Bug fixes, backward compatible
-
-Example progression:
-- 0.1.0 (initial release)
-- 0.1.1 (bug fix)
-- 0.2.0 (new feature)
-- 1.0.0 (stable release, API locked)
-
-## Files Modified During Release
-
-When you bump the version and push to `main`:
-
-- `Cargo.toml` — Version number updated
-- `Cargo.lock` — Updated automatically on next build
-
-No other files need manual updates. The workflow handles:
-- Creating the GitHub Release
-- Building and uploading binaries
-- Generating release notes
-
-## Future: Publishing to crates.io
-
-Currently, `dcl` is distributed via GitHub Releases only. To also publish to [crates.io](https://crates.io):
-
-1. Create an account at crates.io and generate an API token
-2. Add `cargo publish` step to the release workflow
-3. Update README with `cargo install dcl` instructions
-
-This is optional and can be added in a future release without changing the current workflow.
+- **MAJOR** (e.g., 1.0.0): Breaking changes to the CLI interface or behavior.
+- **MINOR** (e.g., 0.2.0): New features, backward compatible.
+- **PATCH** (e.g., 0.1.1): Bug fixes, backward compatible.
 
 ## Rollback
 
 If a release has critical issues:
 
-1. Revert the problematic commit
-2. Bump the version to a patch release (e.g., 0.2.1)
-3. Push to `main` to trigger a new release
-4. (Optional) Delete or mark the problematic release on GitHub as a pre-release or draft
+1. Revert the problematic commit(s).
+2. Bump to a new patch version (e.g., `0.2.1`).
+3. Commit, tag `v0.2.1`, push with `--tags`.
+4. Optionally mark the bad release as a pre-release/draft, or delete it, on the GitHub Releases page.
 
 ## Summary Checklist
 
 - [ ] All features/fixes merged to `main`
-- [ ] Tests pass locally
-- [ ] Update version in `Cargo.toml`
-- [ ] Commit version bump
-- [ ] Push to `main`
-- [ ] Wait for GitHub Actions to complete
-- [ ] Verify release on GitHub Releases page
-- [ ] Test installer script
-- [ ] Announce release in project documentation or changelog
+- [ ] Tests, clippy, fmt pass locally
+- [ ] `Cargo.toml` version bumped
+- [ ] Commit the version bump
+- [ ] `git tag vX.Y.Z` (matches `Cargo.toml`)
+- [ ] `git push origin main --tags`
+- [ ] All 5 `build` jobs green in Actions
+- [ ] `release` job green, GitHub Release has 10 assets (5 archives + 5 checksums)
+- [ ] Smoke-test at least one downloaded binary
