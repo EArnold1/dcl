@@ -52,6 +52,10 @@ project-clone/
 
 The clone can therefore be used immediately without reinstalling dependencies.
 
+## Requirements
+
+**⚠️ Important**: `dcl` requires Git to be installed and available in your PATH. The tool uses Git to create and manage project clones.
+
 ## How It Works
 
 `dcl` operates on the current working directory:
