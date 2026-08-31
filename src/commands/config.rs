@@ -84,8 +84,31 @@ fn resolve_editor() -> Result<String, DevCloneError> {
     Ok(editor)
 }
 
+fn is_executable_on_path(name: &str) -> bool {
+    let Some(path_var) = std::env::var_os("PATH") else {
+        return false;
+    };
+    std::env::split_paths(&path_var).any(|dir| {
+        let candidate = dir.join(name);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            candidate
+                .metadata()
+                .map(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+                .unwrap_or(false)
+        }
+        #[cfg(not(unix))]
+        {
+            candidate.is_file()
+        }
+    })
+}
+
 fn get_platform_default_editor() -> String {
-    if cfg!(windows) {
+    if is_executable_on_path("nano") {
+        "nano".to_string()
+    } else if cfg!(windows) {
         "notepad".to_string()
     } else {
         "vi".to_string()
@@ -97,9 +120,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn get_platform_default_editor_returns_notepad_on_windows() {
+    fn is_executable_on_path_returns_false_for_nonexistent_binary() {
+        assert!(!is_executable_on_path(
+            "definitely-not-a-real-binary-xyz123"
+        ));
+    }
+
+    #[test]
+    fn get_platform_default_editor_prefers_nano_if_available() {
         let editor = get_platform_default_editor();
-        if cfg!(windows) {
+        if is_executable_on_path("nano") {
+            assert_eq!(editor, "nano");
+        } else if cfg!(windows) {
             assert_eq!(editor, "notepad");
         } else {
             assert_eq!(editor, "vi");
@@ -107,9 +139,17 @@ mod tests {
     }
 
     #[test]
-    fn get_platform_default_editor_returns_vi_on_unix() {
-        let editor = get_platform_default_editor();
-        if cfg!(unix) {
+    fn get_platform_default_editor_returns_notepad_on_windows_without_nano() {
+        if cfg!(windows) && !is_executable_on_path("nano") {
+            let editor = get_platform_default_editor();
+            assert_eq!(editor, "notepad");
+        }
+    }
+
+    #[test]
+    fn get_platform_default_editor_returns_vi_on_unix_without_nano() {
+        if cfg!(unix) && !is_executable_on_path("nano") {
+            let editor = get_platform_default_editor();
             assert_eq!(editor, "vi");
         }
     }

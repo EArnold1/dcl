@@ -7,7 +7,7 @@ use crate::{
 
 #[derive(Debug, Parser)]
 #[command(name = "dcl")]
-#[command(version = "0.1.0")]
+#[command(version = "0.2.0")]
 pub struct Cli {
     #[command(subcommand)]
     command: Commands,
