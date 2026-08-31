@@ -6,6 +6,9 @@ authors = [
 "Arnold Emmanuel <arnoldemmanuel15@gmail.com>" # https://github.com/EArnold1
 ]
 description = "dcl is a Rust based CLI tool for creating ready-to-use local clones of development projects by copying, symlinking, and ignoring files and directories according to configurable rules."
+license = "MIT"
+repository = "https://github.com/EArnold1/dcl"
+homepage = "https://github.com/EArnold1/dcl"
 
 [[bin]]
 name = "dcl"

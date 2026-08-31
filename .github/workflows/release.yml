@@ -107,3 +107,58 @@ jobs:
           files: artifacts/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update-homebrew-tap:
+    name: Update Homebrew tap
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Checkout tap repo
+        uses: actions/checkout@v4
+        with:
+          repository: EArnold1/homebrew-dcl
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Update formula
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ARM_SHA=$(cut -d ' ' -f1 artifacts/dcl-aarch64-apple-darwin.tar.gz.sha256)
+          INTEL_SHA=$(cut -d ' ' -f1 artifacts/dcl-x86_64-apple-darwin.tar.gz.sha256)
+          ARM_URL="https://github.com/EArnold1/dcl/releases/download/${GITHUB_REF_NAME}/dcl-aarch64-apple-darwin.tar.gz"
+          INTEL_URL="https://github.com/EArnold1/dcl/releases/download/${GITHUB_REF_NAME}/dcl-x86_64-apple-darwin.tar.gz"
+
+          python3 - "$VERSION" "$ARM_URL" "$ARM_SHA" "$INTEL_URL" "$INTEL_SHA" <<'EOF'
+          import sys, re, pathlib
+          version, arm_url, arm_sha, intel_url, intel_sha = sys.argv[1:6]
+          path = pathlib.Path("tap/Formula/dcl.rb")
+          text = path.read_text()
+          text = re.sub(r'version ".*"', f'version "{version}"', text, count=1)
+
+          def sub_block(text, marker, url, sha):
+              pattern = re.compile(
+                  rf'(on_{marker} do\n\s*url ").*?("\n\s*sha256 ").*?(")',
+                  re.S,
+              )
+              return pattern.sub(lambda m: f"{m.group(1)}{url}{m.group(2)}{sha}{m.group(3)}", text, count=1)
+
+          text = sub_block(text, "arm", arm_url, arm_sha)
+          text = sub_block(text, "intel", intel_url, intel_sha)
+          path.write_text(text)
+          EOF
+
+      - name: Commit and push
+        working-directory: tap
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/dcl.rb
+          git diff --cached --quiet && exit 0
+          git commit -m "dcl ${GITHUB_REF_NAME#v}"
+          git push
