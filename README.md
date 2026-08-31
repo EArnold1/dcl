@@ -1,26 +1,46 @@
 # dcl
 
-`dcl` (devclone) is a command-line tool for creating a ready-to-use clone of a local development project.
+`dcl` (devclone) is a command-line tool for creating a ready-to-use clone of a local development project without reinstalling dependencies.
 
-## The Problem
+## The Idea
 
-When working across Git branches, you may want to run or inspect another branch while keeping your current branch untouched.
+When you need to run or test a different branch while keeping your current work untouched, you have a few options:
 
-Git worktrees can solve this, but they introduce worktree-specific metadata and aren't always the workflow you want.
+- **Git worktrees** work but add metadata and aren't always your preferred workflow
+- **Full clones** give you a clean checkout but require reinstalling all dependencies, often time-consuming for projects with `node_modules`, `.venv`, or other large dependency directories
 
-An alternative is to clone the project again and set it up from scratch. However, that means reinstalling dependencies and recreating the local development environment. For projects with directories such as `node_modules`, this can be slow and wasteful.
+`dcl` solves this by creating a new project clone that **symlinks shared resources** (like `node_modules`) instead of copying them. You get a ready-to-use checkout without the installation overhead.
 
-The result is that you end up with multiple copies of the same dependencies and spend time getting a second checkout ready to use.
+**Example:**
 
-`dcl` solves this by creating a new local project clone and allowing reusable parts of the existing environment to be **symlinked instead of copied**.
+```
+project/
+├── node_modules/
+├── src/
+└── package.json
+
+project_feature_branch/
+├── node_modules → ../project/node_modules (symlink)
+├── src/
+└── package.json
+```
+
+The clone is ready to use immediately—no dependency reinstallation needed.
 
 ## Installation
 
+### Homebrew (macOS)
+
+```bash
+brew install EArnold1/dcl/dcl
+```
+
 ### From GitHub Releases
 
-Download the archive for your platform from the [latest release](https://github.com/EArnold1/dcl/releases/latest).
+Download the archive for your platform from [GitHub Releases](https://github.com/EArnold1/dcl/releases/latest).
 
 **macOS (Apple Silicon):**
+
 ```bash
 curl -LO https://github.com/EArnold1/dcl/releases/latest/download/dcl-aarch64-apple-darwin.tar.gz
 tar xzf dcl-aarch64-apple-darwin.tar.gz
@@ -28,13 +48,21 @@ sudo mv dcl-aarch64-apple-darwin/dcl /usr/local/bin/
 ```
 
 **macOS (Intel):**
+
 ```bash
 curl -LO https://github.com/EArnold1/dcl/releases/latest/download/dcl-x86_64-apple-darwin.tar.gz
 tar xzf dcl-x86_64-apple-darwin.tar.gz
 sudo mv dcl-x86_64-apple-darwin/dcl /usr/local/bin/
 ```
 
+**Note:** If you encounter a Gatekeeper "unidentified developer" warning when running `dcl`, remove the quarantine attribute:
+
+```bash
+xattr -d com.apple.quarantine /usr/local/bin/dcl
+```
+
 **Linux (x86_64):**
+
 ```bash
 curl -LO https://github.com/EArnold1/dcl/releases/latest/download/dcl-x86_64-unknown-linux-gnu.tar.gz
 tar xzf dcl-x86_64-unknown-linux-gnu.tar.gz
@@ -42,6 +70,7 @@ sudo mv dcl-x86_64-unknown-linux-gnu/dcl /usr/local/bin/
 ```
 
 **Linux (aarch64):**
+
 ```bash
 curl -LO https://github.com/EArnold1/dcl/releases/latest/download/dcl-aarch64-unknown-linux-gnu.tar.gz
 tar xzf dcl-aarch64-unknown-linux-gnu.tar.gz
@@ -68,73 +97,60 @@ If you have Rust installed:
 cargo install --git https://github.com/EArnold1/dcl
 ```
 
-For example:
-
-```text
-project/
-├── node_modules/
-├── src/
-└── package.json
-
-project-clone/
-├── node_modules -> ../project/node_modules
-├── src/
-└── package.json
-```
-
-The clone can therefore be used immediately without reinstalling dependencies.
-
 ## Requirements
 
-**⚠️ Important**: `dcl` requires Git to be installed and available in your PATH. The tool uses Git to create and manage project clones.
+`dcl` requires Git to be installed and available in your PATH.
 
 ## How It Works
 
-`dcl` operates on the current working directory:
+Navigate to your project root and run `dcl`:
 
 ```bash
+cd my-project
 dcl
 ```
 
-It:
+It will then:
 
-1. Uses the current directory as the project.
-2. Reads the devclone configuration.
-3. Creates a new clone of the project.
-4. Copies files and directories that should be independent.
-5. Symlinks files and directories that can be shared.
-6. Ignores files and directories that should not be cloned.
+1. Read the devclone configuration
+2. Create a new clone of the project in a sibling directory
+3. Copy files and directories that should be independent
+4. Symlink files and directories that can be shared
+5. Ignore files and directories based on your configuration
 
-The result is another working copy that is ready to use while sharing selected local resources with the original project.
+The result is a ready-to-use working copy that shares selected local resources with the original project.
 
 ## Configuration
 
-Configuration is stored in:
+Configuration is stored in `~/.config/devclone/config.toml`.
 
-```text
-~/.config/devclone/config.toml
-```
+The configuration file defines three categories:
 
-The configuration defines rules for:
+- **symlinks** — files and directories that should be shared with the original project (e.g., `node_modules`, `.venv`)
+- **copies** — files and directories that should be copied (e.g., `.env` files, configuration files)
+- **ignore** — files and directories to exclude entirely (e.g., `.git`, build artifacts)
 
-- **copies** — files and directories that should be copied into the clone.
-- **symlinks** — files and directories that should be shared through symbolic links.
-- **ignore** — files and directories that should not be included.
-
-For example, a project may copy its source and configuration files while symlinking `node_modules` so dependencies do not need to be installed again.
+By default, `dcl` symlinks dependency directories and copies environment/configuration files, so you can use the clone immediately without reinstalling dependencies.
 
 ## Development
 
-Build:
+**Build:**
 
 ```bash
 cargo build
 ```
 
-Run tests:
+**Run tests:**
 
 ```bash
 cargo test
+```
+
+**Lint and format check:**
+
+```bash
+cargo clippy
+cargo fmt --check
 ```
 
 ## License
